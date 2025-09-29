@@ -1,0 +1,3 @@
+# Copy this to terraform.tfvars and fill in your values
+
+hetzner_token     = "your-hetzner-api-token"

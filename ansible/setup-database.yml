@@ -1,0 +1,137 @@
+---
+# Ansible playbook to set up database server
+- name: Configure Database Server
+  hosts: database
+  become: yes
+  vars:
+    registry_host: "europe-west3-docker.pkg.dev"
+    registry_project: "predkit"
+    registry_repo: "main"
+    image_name: "predkit-db"
+    image_tag: "latest"
+    compose_dir: "/opt/predkit"
+  vars_files:
+    - vars/secrets.yml
+    
+  tasks:
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+
+    - name: Install required packages
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - gnupg
+          - lsb-release
+        state: present
+
+    - name: Add Docker GPG key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+
+    - name: Install Docker
+      apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-compose-plugin
+        state: present
+
+    - name: Start and enable Docker service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Install Google Cloud SDK
+      shell: |
+        echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+        curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+        apt-get update
+        apt-get install -y google-cloud-cli
+      args:
+        creates: /usr/bin/gcloud
+
+    - name: Copy GCP service account key
+      copy:
+        src: ../terraform/service-key.json
+        dest: /root/service-key.json
+        mode: '0600'
+
+    - name: Authenticate with GCP service account
+      shell: gcloud auth activate-service-account --key-file=/root/service-key.json
+
+    - name: Configure Docker for GCP registry
+      shell: yes | gcloud auth configure-docker {{ registry_host }}
+      register: docker_auth_result
+
+    - name: Show Docker auth result
+      debug:
+        var: docker_auth_result
+
+    - name: Create compose directory
+      file:
+        path: "{{ compose_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Create init-scripts directory
+      file:
+        path: "{{ compose_dir }}/init-scripts"
+        state: directory
+        mode: '0755'
+
+    - name: Create backups directory
+      file:
+        path: "{{ compose_dir }}/backups"
+        state: directory
+        mode: '0755'
+
+    - name: Create environment file
+      template:
+        src: env.j2
+        dest: "{{ compose_dir }}/.env"
+        mode: '0600'
+
+    - name: Create docker-compose file
+      template:
+        src: compose.yml.j2
+        dest: "{{ compose_dir }}/compose.yml"
+        mode: '0644'
+      notify: restart predkit services
+
+    - name: Pull Docker images
+      shell: |
+        cd {{ compose_dir }}
+        docker compose pull postgres
+
+    - name: Create systemd service for predkit stack
+      template:
+        src: predkit-stack.service.j2
+        dest: /etc/systemd/system/predkit-stack.service
+      notify: restart predkit services
+
+    - name: Enable and start predkit stack
+      systemd:
+        name: predkit-stack
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+  handlers:
+    - name: restart predkit services
+      systemd:
+        name: predkit-stack
+        state: restarted
+        daemon_reload: yes
