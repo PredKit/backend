@@ -61,4 +61,4 @@ Thumbs.db
 
 # Ansible
 ansible/vars/secrets.yml
-ansible/service-key.json
+**/service-key.json
