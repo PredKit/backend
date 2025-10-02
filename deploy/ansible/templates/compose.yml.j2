@@ -1,0 +1,60 @@
+services:
+  postgres:
+    image: {{ registry_host }}/{{ registry_project }}/{{ registry_repo }}/{{ image_name }}:{{ image_tag }}
+    container_name: predkit-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    # Bind to WireGuard interface only for security
+    # Remote access via VPN at {{ wireguard_server_vpn_ip }}:5432
+    # Local access (for vectorizer) via localhost
+    ports:
+      - "{{ wireguard_server_vpn_ip }}:${POSTGRES_PORT}:5432"
+      - "127.0.0.1:${POSTGRES_PORT}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+      - ./backups:/backups
+    networks:
+      - predkit-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Optional: pgai vectorizer worker (use --profile vectorizer to enable)
+  vectorizer:
+    image: python:3.13-slim
+    container_name: pgai-vectorizer
+    restart: unless-stopped
+    environment:
+      # Connect to postgres via host network (localhost)
+      - DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:${POSTGRES_PORT}/${POSTGRES_DB}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    command: >
+      sh -c "
+        pip install --no-cache-dir 'pgai[vectorizer-worker]' &&
+        python -c 'from pgai.vectorizer import Worker; Worker(\"$$DB_URL\").run()'
+      "
+    depends_on:
+      postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - predkit-network
+    profiles:
+      - vectorizer
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  predkit-network:
+    driver: bridge

@@ -1,0 +1,21 @@
+[Interface]
+Address = {{ wireguard_server_vpn_ip }}/24
+ListenPort = {{ wireguard_port }}
+PrivateKey = {{ server_privkey_content.content | b64decode | trim }}
+
+# PostUp/PostDown rules for NAT (if needed for internet routing)
+# PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+# PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+
+{% for i in range(wireguard_clients | length) %}
+{% set client = wireguard_clients[i] %}
+# Client: {{ client.name }}
+[Peer]
+PublicKey = {{ client_pubkeys.results[i].stdout }}
+AllowedIPs = {{ client.vpn_ip }}/32
+{% if client.persistent_keepalive | default(true) %}
+PersistentKeepalive = 25
+{% endif %}
+
+{% endfor %}
+

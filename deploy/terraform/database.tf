@@ -28,6 +28,7 @@ data "hcloud_ssh_key" "deploy" {
 resource "hcloud_firewall" "database" {
   name = "db-firewall"
 
+  # SSH access
   rule {
     direction = "in"
     port      = "22"
@@ -35,12 +36,16 @@ resource "hcloud_firewall" "database" {
     source_ips = ["0.0.0.0/0"]
   }
 
+  # WireGuard VPN
   rule {
     direction = "in"
-    port      = "5432"
-    protocol  = "tcp"
+    port      = "51820"
+    protocol  = "udp"
     source_ips = ["0.0.0.0/0"]
   }
+
+  # PostgreSQL access is now restricted to WireGuard VPN network (10.0.100.0/24)
+  # The database will only bind to the WireGuard interface
 }
 
 resource "hcloud_firewall_attachment" "database" {

@@ -1,0 +1,148 @@
+---
+# WireGuard VPN setup for secure database access
+- name: Install WireGuard
+  apt:
+    name:
+      - wireguard
+      - wireguard-tools
+    state: present
+    update_cache: yes
+
+- name: Enable IP forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: yes
+    state: present
+    reload: yes
+
+- name: Create WireGuard config directory
+  file:
+    path: /etc/wireguard
+    state: directory
+    mode: '0700'
+
+- name: Check if server private key exists
+  stat:
+    path: /etc/wireguard/server_private.key
+  register: server_privkey
+
+- name: Generate server private key
+  shell: wg genkey > /etc/wireguard/server_private.key
+  when: not server_privkey.stat.exists
+
+- name: Set permissions on server private key
+  file:
+    path: /etc/wireguard/server_private.key
+    mode: '0600'
+
+- name: Read server private key
+  slurp:
+    src: /etc/wireguard/server_private.key
+  register: server_privkey_content
+
+- name: Generate server public key
+  shell: echo "{{ server_privkey_content.content | b64decode | trim }}" | wg pubkey
+  register: server_pubkey_result
+  changed_when: false
+
+- name: Save server public key
+  copy:
+    content: "{{ server_pubkey_result.stdout }}"
+    dest: /etc/wireguard/server_public.key
+    mode: '0644'
+
+- name: Generate client keys
+  block:
+    - name: Check if client private key exists
+      stat:
+        path: "/etc/wireguard/client_{{ item.name }}_private.key"
+      register: client_privkey
+      loop: "{{ wireguard_clients }}"
+
+    - name: Generate client private keys
+      shell: wg genkey > "/etc/wireguard/client_{{ item.item.name }}_private.key"
+      when: not item.stat.exists
+      loop: "{{ client_privkey.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+
+    - name: Set permissions on client private keys
+      file:
+        path: "/etc/wireguard/client_{{ item.name }}_private.key"
+        mode: '0600'
+      loop: "{{ wireguard_clients }}"
+
+    - name: Read client private keys
+      slurp:
+        src: "/etc/wireguard/client_{{ item.name }}_private.key"
+      register: client_privkey_contents
+      loop: "{{ wireguard_clients }}"
+
+    - name: Generate client public keys
+      shell: echo "{{ item.content | b64decode | trim }}" | wg pubkey
+      register: client_pubkeys
+      loop: "{{ client_privkey_contents.results }}"
+      loop_control:
+        label: "{{ item.item.name }}"
+      changed_when: false
+
+    - name: Save client public keys
+      copy:
+        content: "{{ item.stdout }}"
+        dest: "/etc/wireguard/client_{{ item.item.item.name }}_public.key"
+        mode: '0644'
+      loop: "{{ client_pubkeys.results }}"
+      loop_control:
+        label: "{{ item.item.item.name }}"
+
+- name: Create WireGuard server configuration
+  template:
+    src: wg0.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    mode: '0600'
+  notify: restart wireguard
+
+- name: Enable and start WireGuard
+  systemd:
+    name: wg-quick@wg0
+    enabled: yes
+    state: started
+
+- name: Create client config directory
+  file:
+    path: /root/wireguard-clients
+    state: directory
+    mode: '0700'
+
+- name: Generate client configuration files
+  template:
+    src: client.conf.j2
+    dest: "/root/wireguard-clients/{{ item.0.name }}.conf"
+    mode: '0600'
+  loop: "{{ wireguard_clients | zip(client_privkey_contents.results, client_pubkeys.results) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+
+- name: Fetch client configurations to local machine
+  fetch:
+    src: "/root/wireguard-clients/{{ item.0.name }}.conf"
+    dest: "{{ playbook_dir }}/wireguard-clients/{{ item.0.name }}.conf"
+    flat: yes
+  loop: "{{ wireguard_clients | zip(client_privkey_contents.results, client_pubkeys.results) | list }}"
+  loop_control:
+    label: "{{ item.0.name }}"
+
+- name: Display WireGuard setup information
+  debug:
+    msg:
+      - "WireGuard VPN configured successfully!"
+      - "Server IP: {{ wireguard_server_ip }}"
+      - "Server port: {{ wireguard_port }}"
+      - "Server public key: {{ server_pubkey_result.stdout }}"
+      - "VPN network: {{ wireguard_network }}"
+      - "PostgreSQL accessible at: {{ wireguard_server_vpn_ip }}:5432"
+      - ""
+      - "Client configurations downloaded to: {{ playbook_dir }}/wireguard-clients/"
+      - "Update your connection strings to use: {{ wireguard_server_vpn_ip }}"
+

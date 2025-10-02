@@ -1,0 +1,46 @@
+-- Enable required extensions for PredKit
+-- This script runs automatically when the container starts
+
+\echo 'Creating extensions...'
+
+-- Check if extensions are available before creating them
+SELECT name, default_version, installed_version 
+FROM pg_available_extensions 
+WHERE name IN ('pg_search', 'ai');
+
+-- Create pg_search extension (ParadeDB)
+-- This extension provides full-text search with BM25 algorithm
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_search') THEN
+        CREATE EXTENSION IF NOT EXISTS pg_search;
+        RAISE NOTICE 'pg_search extension created successfully';
+    ELSE
+        RAISE WARNING 'pg_search extension is not available';
+    END IF;
+END $$;
+
+-- Create pgai extension (Timescale AI)
+-- This extension provides AI/ML capabilities
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'ai') THEN
+        CREATE EXTENSION IF NOT EXISTS ai CASCADE;
+        RAISE NOTICE 'pgai extension created successfully';
+    ELSE
+        RAISE WARNING 'ai extension is not available';
+    END IF;
+END $$;
+
+\echo 'Extensions creation completed!'
+
+-- Verify extensions are installed and show their versions
+\echo 'Installed extensions:'
+SELECT 
+    extname as "Extension Name", 
+    extversion as "Version",
+    extrelocatable as "Relocatable"
+FROM pg_extension 
+WHERE extname IN ('pg_search', 'ai')
+ORDER BY extname;
+

@@ -19,6 +19,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.venv/
+venv/
 
 # Virtual environments
 .env
@@ -62,3 +64,6 @@ Thumbs.db
 # Ansible
 ansible/vars/secrets.yml
 **/service-key.json
+
+# WireGuard client configs (contain private keys!)
+deploy/ansible/wireguard-clients/*.conf

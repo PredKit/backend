@@ -10,6 +10,21 @@
     image_name: "predkit-db"
     image_tag: "latest"
     compose_dir: "/opt/predkit"
+    # WireGuard VPN configuration
+    wireguard_port: 51820
+    wireguard_network: "10.0.100.0/24"
+    wireguard_server_vpn_ip: "10.0.100.1"
+    wireguard_server_ip: "{{ server_ip }}"
+    wireguard_clients:
+      - name: "local-dev"
+        vpn_ip: "10.0.100.2"
+        persistent_keepalive: true
+      - name: "admin-laptop"
+        vpn_ip: "10.0.100.3"
+        persistent_keepalive: true
+      - name: "ci-cd"
+        vpn_ip: "10.0.100.4"
+        persistent_keepalive: true
   vars_files:
     - vars/secrets.yml
     
@@ -128,6 +143,11 @@
         state: started
         enabled: yes
         daemon_reload: yes
+
+    # WireGuard VPN Setup
+    - name: Setup WireGuard VPN
+      import_role:
+        name: wireguard
 
   handlers:
     - name: restart predkit services
