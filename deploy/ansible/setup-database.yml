@@ -4,12 +4,22 @@
   hosts: database
   become: yes
   vars:
+    # Server configuration
+    server_ip: "88.99.86.51"  # From Terraform output
+    
     # GCP Registry
     registry_host: "europe-west3-docker.pkg.dev"
     registry_project: "predkit"
     registry_repo: "main"
     
     compose_dir: "/opt/predkit"
+    
+    # API domain
+    api_domain: "api.predkit.com"
+    
+    # Database configuration
+    postgres_db: "predkit"
+    postgres_user: "pikachu"
     
     # WireGuard VPN configuration
     wireguard_port: 51820
@@ -58,13 +68,16 @@
         repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
         state: present
 
-    - name: Install Docker
+    - name: Install Docker, Nginx, and Certbot
       apt:
         name:
           - docker-ce
           - docker-ce-cli
           - containerd.io
           - docker-compose-plugin
+          - nginx
+          - certbot
+          - python3-certbot-nginx
         state: present
 
     - name: Start and enable Docker service
@@ -170,6 +183,136 @@
         daemon_reload: yes
         state: started
 
+    # Nginx Setup
+    - name: Remove default nginx site
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Create certbot webroot directory
+      file:
+        path: /var/www/certbot
+        state: directory
+        mode: '0755'
+
+    # SSL Certificate Setup (before creating nginx config)
+    - name: Check if SSL certificate exists
+      stat:
+        path: "/etc/letsencrypt/live/{{ api_domain }}/fullchain.pem"
+      register: ssl_cert
+
+    - name: Create temporary HTTP-only nginx config (for initial certbot run)
+      copy:
+        content: |
+          server {
+              listen 80;
+              listen [::]:80;
+              server_name {{ api_domain }};
+
+              location /.well-known/acme-challenge/ {
+                  root /var/www/certbot;
+              }
+
+              location / {
+                  return 503 "Service temporarily unavailable during SSL setup";
+              }
+          }
+        dest: /etc/nginx/sites-available/predkit-api-temp
+        mode: '0644'
+      when: not ssl_cert.stat.exists
+
+    - name: Enable temporary nginx site
+      file:
+        src: /etc/nginx/sites-available/predkit-api-temp
+        dest: /etc/nginx/sites-enabled/predkit-api
+        state: link
+        force: yes
+      when: not ssl_cert.stat.exists
+
+    - name: Test temporary nginx configuration
+      command: nginx -t
+      when: not ssl_cert.stat.exists
+      changed_when: false
+
+    - name: Start nginx for certbot (if not running)
+      systemd:
+        name: nginx
+        state: restarted
+      when: not ssl_cert.stat.exists
+
+    - name: Obtain SSL certificate with certbot
+      command: >
+        certbot certonly --webroot 
+        -w /var/www/certbot
+        -d {{ api_domain }}
+        --non-interactive
+        --agree-tos
+        --email {{ letsencrypt_email }}
+      when: 
+        - not ssl_cert.stat.exists
+        - api_domain != ansible_default_ipv4.address
+      register: certbot_result
+      ignore_errors: yes
+
+    - name: Create full nginx site configuration for API (with HTTPS)
+      template:
+        src: nginx-api.conf.j2
+        dest: /etc/nginx/sites-available/predkit-api
+        mode: '0644'
+      notify: reload nginx
+
+    - name: Enable nginx site
+      file:
+        src: /etc/nginx/sites-available/predkit-api
+        dest: /etc/nginx/sites-enabled/predkit-api
+        state: link
+        force: yes
+      notify: reload nginx
+
+    - name: Remove temporary nginx config (if exists)
+      file:
+        path: /etc/nginx/sites-available/predkit-api-temp
+        state: absent
+
+    - name: Test nginx configuration
+      command: nginx -t
+      register: nginx_test
+      changed_when: false
+      failed_when: nginx_test.rc != 0
+
+    - name: Ensure nginx is started and enabled
+      systemd:
+        name: nginx
+        state: started
+        enabled: yes
+        daemon_reload: yes
+
+    - name: Display certbot result
+      debug:
+        var: certbot_result
+      when: certbot_result is defined
+
+    - name: Setup certbot auto-renewal with systemd timer
+      systemd:
+        name: certbot.timer
+        enabled: yes
+        state: started
+
+    - name: Ensure certbot renewal hook reloads nginx
+      copy:
+        dest: /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+        content: |
+          #!/bin/bash
+          systemctl reload nginx
+        mode: '0755'
+
+    - name: Test certbot renewal (dry-run)
+      command: certbot renew --dry-run
+      register: certbot_dryrun
+      changed_when: false
+      failed_when: false
+      when: ssl_cert.stat.exists
+
     # WireGuard VPN Setup
     - name: Setup WireGuard VPN
       import_role:
@@ -181,3 +324,8 @@
         name: predkit-stack
         state: restarted
         daemon_reload: yes
+
+    - name: reload nginx
+      systemd:
+        name: nginx
+        state: reloaded

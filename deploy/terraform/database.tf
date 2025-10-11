@@ -44,8 +44,24 @@ resource "hcloud_firewall" "database" {
     source_ips = ["0.0.0.0/0"]
   }
 
+  # HTTP (for certbot ACME challenge and redirect to HTTPS)
+  rule {
+    direction = "in"
+    port      = "80"
+    protocol  = "tcp"
+    source_ips = ["0.0.0.0/0"]
+  }
+
+  # HTTPS (for API with SSL)
+  rule {
+    direction = "in"
+    port      = "443"
+    protocol  = "tcp"
+    source_ips = ["0.0.0.0/0"]
+  }
+
   # PostgreSQL access is now restricted to WireGuard VPN network (10.0.100.0/24)
-  # The database will only bind to the WireGuard interface
+  # API access is via nginx reverse proxy on bare metal
 }
 
 resource "hcloud_firewall_attachment" "database" {

@@ -67,3 +67,9 @@ ansible/vars/secrets.yml
 
 # WireGuard client configs (contain private keys!)
 deploy/ansible/wireguard-clients/*.conf
+
+# Database backups (too large for git)
+*.dump
+*.sql.gz
+backup.dump
+backups/

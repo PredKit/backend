@@ -97,6 +97,56 @@ ssh root@<server-ip> 'cd /opt/predkit && docker compose pull indexer'
 ssh root@<server-ip> 'systemctl start indexer.service'
 ```
 
+## API Deployment
+
+The API runs on the same server, behind nginx reverse proxy.
+
+### Deploy New API Version
+
+```bash
+# 1. Build and push image
+cd deploy/scripts
+./deploy-api.sh
+
+# 2. Deploy to server (pulls image, restarts API, reloads nginx)
+cd ../ansible
+./run.sh
+```
+
+### Access API
+
+- **HTTPS**: `https://api.predkit.com/`
+- **Swagger docs**: `https://api.predkit.com/docs`
+- **Health check**: `https://api.predkit.com/health`
+
+### Setup Custom Domain & SSL
+
+1. **Point your domain** to the server IP (A record)
+
+2. **Update secrets file** (already configured):
+   ```yaml
+   # deploy/ansible/vars/secrets.yml
+   api_domain_name: "api.predkit.com"
+   letsencrypt_email: "mohamedalichelbi123@gmail.com"
+   ```
+
+3. **Re-run Ansible** (it will automatically obtain SSL certificate):
+   ```bash
+   cd deploy/ansible && ./run.sh
+   ```
+
+Ansible will:
+- Install certbot
+- Obtain Let's Encrypt SSL certificate
+- Configure nginx for HTTPS
+- Enable certbot.timer (automatic renewal twice daily)
+- Set up nginx reload hook on certificate renewal
+
+**Note**: 
+- HTTP requests are automatically redirected to HTTPS
+- Certificates auto-renew before expiration (systemd timer)
+- Nginx automatically reloads when certificates are renewed
+
 ### Monitor Indexer
 
 ```bash
@@ -160,6 +210,14 @@ uv run alembic upgrade head
 1. Check timer: `ssh root@<server-ip> 'systemctl status indexer.timer'`
 2. Check service: `ssh root@<server-ip> 'systemctl status indexer.service'`
 3. View logs: `ssh root@<server-ip> 'journalctl -u indexer.service -n 100'`
+
+### API not responding
+
+1. Check nginx: `ssh root@<server-ip> 'systemctl status nginx'`
+2. Check API container: `ssh root@<server-ip> 'docker ps | grep predkit-api'`
+3. Check API logs: `ssh root@<server-ip> 'docker logs predkit-api -f'`
+4. Check nginx logs: `ssh root@<server-ip> 'tail -f /var/log/nginx/predkit-api-error.log'`
+5. Test localhost: `ssh root@<server-ip> 'curl http://localhost:8000/health'`
 
 ### Regenerate VPN keys
 

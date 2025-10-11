@@ -33,7 +33,7 @@ async def search_events(
                 platform_id,
                 search_text,
                 paradedb.score(id) as rank
-            FROM events
+            FROM event
             WHERE search_text @@@ :query
             ORDER BY rank DESC
             LIMIT :limit

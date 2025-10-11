@@ -25,6 +25,13 @@ cd deploy/scripts
 ./deploy-indexer.sh
 ```
 
+### `deploy-api.sh`
+Builds and pushes API Docker image to GCP Artifact Registry.
+```bash
+cd deploy/scripts
+./deploy-api.sh
+```
+
 ## Full Deployment Flow
 
 See [../DEPLOYMENT.md](../DEPLOYMENT.md) for complete deployment guide.
