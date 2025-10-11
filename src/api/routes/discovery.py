@@ -6,11 +6,14 @@ Implements llms.txt standard and other discovery mechanisms:
 - /robots.txt: Crawler control
 - /ai.txt: Alternative AI discovery format
 - /: API metadata
+
+These endpoints are hidden from API docs since they're metadata/discovery,
+not part of the core API functionality.
 """
 
 from fastapi import APIRouter, Response
 
-router = APIRouter(tags=["discovery"])
+router = APIRouter(tags=["discovery"], include_in_schema=False)
 
 
 @router.get("/")
