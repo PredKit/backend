@@ -1,0 +1,12 @@
+[Unit]
+Description=Run PredKit Event Indexer Hourly
+Requires=predkit-stack.service
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
+

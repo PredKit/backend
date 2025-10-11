@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: {{ registry_host }}/{{ registry_project }}/{{ registry_repo }}/{{ image_name }}:{{ image_tag }}
+    image: {{ registry_host }}/{{ registry_project }}/{{ registry_repo }}/predkit-db:latest
     container_name: predkit-db
     restart: unless-stopped
     environment:
@@ -50,6 +50,23 @@ services:
       - predkit-network
     profiles:
       - vectorizer
+
+  # Event indexer job (triggered by systemd timer, not running continuously)
+  indexer:
+    image: {{ registry_host }}/{{ registry_project }}/{{ registry_repo }}/indexer:latest
+    container_name: predkit-indexer
+    restart: "no"  # Managed by systemd timer
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${POSTGRES_DB}
+      - DB_USER=${POSTGRES_USER}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - predkit-network
 
 volumes:
   postgres_data:

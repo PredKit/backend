@@ -13,11 +13,20 @@ AI-powered serverless backend with PostgreSQL database on Hetzner VPS.
 
 ```
 backend/
-├── api/                # Cloud Functions (HTTP endpoints)
-├── indexers/           # Background processing functions
-├── terraform/          # Infrastructure as Code
-├── ansible/            # Server configuration
-└── shared/             # Shared Python modules
+├── src/
+│   ├── api/                    # Cloud Functions (HTTP endpoints)
+│   ├── indexers/               # Background processing
+│   │   ├── kalshi/            # Kalshi market collector
+│   │   ├── polymarket/        # Polymarket collector
+│   │   ├── indexer.py         # Main indexing logic
+│   │   └── run.py             # Production entrypoint
+│   └── shared/                # Shared Python modules
+├── deploy/
+│   ├── terraform/             # Infrastructure as Code
+│   └── ansible/               # Server configuration & indexer deployment
+├── alembic/                   # Database migrations
+├── Dockerfile.indexer         # Indexer container image
+└── test_indexer.py            # Local testing script
 ```
 
 ## Local Development
@@ -42,44 +51,41 @@ docker exec -it predkit-db psql -U pikachu -d predkit
 
 ## Production Deployment
 
-1. **Deploy Infrastructure & Database:**
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for complete deployment guide.
+
+**Quick Start:**
+
+1. **Deploy Infrastructure:**
    ```bash
-   # Configure secrets
-   cp terraform/terraform.tfvars.example terraform/terraform.tfvars
-   
-   # Deploy infrastructure
-   cd deploy/terraform && terraform apply
-   
-   # Configure server + WireGuard VPN
-   cd ../ansible && ./run.sh
+   cd deploy/scripts
+   ./setup-gcp.sh    # One-time GCP setup
+   ./deploy-db.sh    # Deploy Hetzner VPS + GCP registry
    ```
 
-2. **Setup VPN Client:**
+2. **Configure Server:**
    ```bash
-   # Client configs will be downloaded to deploy/ansible/wireguard-clients/
+   cd ../ansible
+   ./run.sh          # Setup Docker, WireGuard, PostgreSQL
+   ```
+
+3. **Setup VPN & Connect:**
+   ```bash
    sudo cp deploy/ansible/wireguard-clients/local-dev.conf /etc/wireguard/predkit.conf
    sudo wg-quick up predkit
-   
-   # Verify VPN connection
    ping 10.0.100.1
-   ```
-   
-   See [deploy/ansible/WIREGUARD_SETUP.md](deploy/ansible/WIREGUARD_SETUP.md) for detailed instructions.
-
-3. **Update Connection Strings:**
-   ```bash
-   # Update .env to use VPN IP
-   DB_HOST=10.0.100.1  # Instead of public IP
-   ```
-
-4. **Access Database:**
-   ```bash
-   # Via VPN
    psql "postgresql://pikachu:password@10.0.100.1:5432/predkit"
-   
-   # Or SSH to server
-   ssh root@<server-ip> 'docker exec -it predkit-db psql -U pikachu -d predkit'
    ```
+
+## Indexer Deployment
+
+The indexer runs hourly on the DB server via systemd timer.
+
+```bash
+cd deploy/scripts
+./deploy-indexer.sh  # Build & push image
+```
+
+See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for monitoring and troubleshooting.
 
 ## Extensions
 

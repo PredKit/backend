@@ -1,0 +1,18 @@
+[Unit]
+Description=PredKit Event Indexer Job
+Requires=docker.service predkit-stack.service
+After=docker.service predkit-stack.service
+
+[Service]
+Type=oneshot
+WorkingDirectory={{ compose_dir }}
+ExecStart=/usr/bin/docker compose run --rm indexer
+
+# Logging to journalctl
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=predkit-indexer
+
+[Install]
+WantedBy=multi-user.target
+

@@ -4,12 +4,13 @@
   hosts: database
   become: yes
   vars:
+    # GCP Registry
     registry_host: "europe-west3-docker.pkg.dev"
     registry_project: "predkit"
     registry_repo: "main"
-    image_name: "predkit-db"
-    image_tag: "latest"
+    
     compose_dir: "/opt/predkit"
+    
     # WireGuard VPN configuration
     wireguard_port: 51820
     wireguard_network: "10.0.100.0/24"
@@ -24,6 +25,9 @@
         persistent_keepalive: true
       - name: "ci-cd"
         vpn_ip: "10.0.100.4"
+        persistent_keepalive: true
+      - name: "api"
+        vpn_ip: "10.0.100.11"
         persistent_keepalive: true
   vars_files:
     - vars/secrets.yml
@@ -126,10 +130,13 @@
         mode: '0644'
       notify: restart predkit services
 
-    - name: Pull Docker images
+    - name: Check for new Docker images and start/update stack
       shell: |
         cd {{ compose_dir }}
-        docker compose pull postgres
+        docker compose pull --quiet
+        docker compose up -d
+      register: compose_up_result
+      changed_when: "'Pulled' in compose_up_result.stderr or 'Started' in compose_up_result.stderr or 'Recreated' in compose_up_result.stderr"
 
     - name: Create systemd service for predkit stack
       template:
@@ -137,12 +144,31 @@
         dest: /etc/systemd/system/predkit-stack.service
       notify: restart predkit services
 
-    - name: Enable and start predkit stack
+    - name: Enable predkit stack
       systemd:
         name: predkit-stack
-        state: started
         enabled: yes
         daemon_reload: yes
+
+    # Create systemd service for indexer
+    - name: Create systemd service for indexer
+      template:
+        src: indexer.service.j2
+        dest: /etc/systemd/system/indexer.service
+
+    # Create systemd timer for indexer
+    - name: Create systemd timer for indexer
+      template:
+        src: indexer.timer.j2
+        dest: /etc/systemd/system/indexer.timer
+
+    # Enable and start indexer timer
+    - name: Enable indexer timer
+      systemd:
+        name: indexer.timer
+        enabled: yes
+        daemon_reload: yes
+        state: started
 
     # WireGuard VPN Setup
     - name: Setup WireGuard VPN

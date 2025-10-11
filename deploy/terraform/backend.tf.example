@@ -1,0 +1,37 @@
+# Example: Remote backend configuration for Terraform state
+# This stores your state file securely in GCS with encryption
+# 
+# To use:
+# 1. Create a GCS bucket for state:
+#    gcloud storage buckets create gs://predkit-terraform-state \
+#      --project=predkit \
+#      --location=europe-west3
+#
+# 2. Enable versioning:
+#    gcloud storage buckets update gs://predkit-terraform-state --versioning
+#
+# 3. Copy this file to backend.tf:
+#    cp backend.tf.example backend.tf
+#
+# 4. Initialize:
+#    terraform init -migrate-state
+
+terraform {
+  backend "gcs" {
+    bucket  = "predkit-terraform-state"
+    prefix  = "production"
+    
+    # Optional: Enable encryption with Customer Managed Encryption Key (CMEK)
+    # encryption_key = "projects/predkit/locations/europe-west3/keyRings/terraform/cryptoKeys/state"
+  }
+}
+
+# Why use remote backend?
+# ✅ State file encrypted at rest
+# ✅ Automatic state locking (prevents concurrent modifications)
+# ✅ State versioning (can rollback)
+# ✅ Team collaboration (shared state)
+# ✅ No local state files with secrets
+
+# Cost: ~$0.01/month (GCS storage is cheap)
+
