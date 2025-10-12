@@ -13,9 +13,9 @@ from shared.entities import Platform
 class SearchType(str, Enum):
     """Search algorithm type"""
 
-    BM25 = "bm25"  # Full-text search using ParadeDB BM25
-    SEMANTIC = "semantic"  # Vector similarity using pgai embeddings
-    HYBRID = "hybrid"  # Both BM25 and semantic (for re-ranking)
+    SYNTACTIC = "syntactic"  # Keyword-based search
+    SEMANTIC = "semantic"  # Meaning-based search using AI embeddings
+    HYBRID = "hybrid"  # Both syntactic and semantic combined
 
 
 class SearchRequest(BaseModel):
@@ -34,7 +34,7 @@ class SearchRequest(BaseModel):
         int,
         Field(
             ge=1,
-            le=100,
+            le=10,
             description="Maximum number of results to return",
         ),
     ] = 10
@@ -42,12 +42,11 @@ class SearchRequest(BaseModel):
         SearchType,
         Field(
             description=(
-                "Search algorithm: 'bm25' for keyword search, 'semantic' "
-                "for meaning-based search, 'hybrid' for both (returns 2x "
-                "limit for re-ranking)"
+                "Search type: 'syntactic' for keyword matching, 'semantic' "
+                "for meaning-based search, 'hybrid' for best results (default)"
             ),
         ),
-    ] = SearchType.BM25
+    ] = SearchType.HYBRID
 
 
 class EventResult(BaseModel):
@@ -59,19 +58,9 @@ class EventResult(BaseModel):
     rank: Annotated[
         float,
         Field(
-            description=(
-                "Relevance score (BM25 rank for keyword search, or cosine "
-                "distance for semantic search)"
-            )
+            description="Relevance confidence score (0.0-1.0, higher is more relevant)"
         ),
     ]
-    source: Annotated[
-        str | None,
-        Field(
-            description="Result source: 'bm25' or 'semantic' (only for hybrid search)",
-            default=None,
-        ),
-    ] = None
 
 
 class SearchResponse(BaseModel):
@@ -81,7 +70,7 @@ class SearchResponse(BaseModel):
     results: Annotated[list[EventResult], Field(description="Search results")]
     total: Annotated[int, Field(description="Total number of results returned")]
     search_type: Annotated[
-        str, Field(description="Search type used: bm25, semantic, or hybrid")
+        str, Field(description="Search type used: syntactic, semantic, or hybrid")
     ]
 
 

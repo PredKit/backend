@@ -10,6 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.models import EventResult, SearchRequest, SearchResponse, SearchType
+from api.reranker import rerank_results
 from shared.config import settings
 from shared.database import get_db
 from shared.entities import Platform
@@ -145,14 +146,7 @@ async def _search_hybrid(query: str, limit: int, db: AsyncSession) -> list[Event
     elif isinstance(results[1], list):
         semantic_results = results[1]
 
-    # Mark results with their source
-    for result in bm25_results:
-        result.source = "bm25"
-    for result in semantic_results:
-        result.source = "semantic"
-
-    # Combine results (BM25 first, then semantic)
-    # Deduplication can be done by the re-ranker
+    # Combine results (syntactic first, then semantic)
     return bm25_results + semantic_results
 
 
@@ -162,17 +156,21 @@ async def search_events(
     db: AsyncSession = Depends(get_db),
 ) -> SearchResponse:
     """
-    Search prediction market events using BM25, semantic, or hybrid search.
+    Search prediction market events.
 
-    - **bm25**: Fast keyword-based search using ParadeDB BM25 index
-    - **semantic**: Meaning-based search using OpenAI embeddings (512-dim) and pgvector
-    - **hybrid**: Both BM25 and semantic (returns 2x limit for re-ranking)
+    - **syntactic**: Keyword-based search (fast, exact matching)
+    - **semantic**: AI-powered meaning-based search
+    - **hybrid**: Best of both worlds (default, recommended)
+
+    All results are automatically filtered using AI confidence scoring.
+    Only high-confidence matches (>= 50%) are returned, so you may receive
+    fewer results than requested.
 
     Returns events ranked by relevance to the query.
     """
     try:
         # Route to appropriate search implementation
-        if request.search_type == SearchType.BM25:
+        if request.search_type == SearchType.SYNTACTIC:
             results = await _search_bm25(request.query, request.limit, db)
         elif request.search_type == SearchType.SEMANTIC:
             results = await _search_semantic(request.query, request.limit, db)
@@ -184,17 +182,29 @@ async def search_events(
                 detail=f"Unknown search type: {request.search_type}",
             )
 
+        # Apply LLM reranking to filter low-confidence results
+        if len(results) >= 1:
+            reranked_results = await rerank_results(
+                query=request.query,
+                results=results,
+                min_score=0.5,  # Only keep results with >= 50% confidence
+            )
+            final_results = reranked_results[: request.limit]
+        else:
+            final_results = results
+
         logger.info(
             "Search completed",
             query=request.query,
             search_type=request.search_type,
-            results_count=len(results),
+            initial_results=len(results),
+            final_results=len(final_results),
         )
 
         return SearchResponse(
             query=request.query,
-            results=results,
-            total=len(results),
+            results=final_results,
+            total=len(final_results),
             search_type=request.search_type.value,
         )
 
