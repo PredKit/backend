@@ -12,7 +12,7 @@ from shared.config import settings
 logger = structlog.get_logger()
 openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
 
-# Token IDs for "True" and "False" tokens in gpt-5-nano
+# Token IDs for "True" and "False" tokens in gpt-4.1-nano
 # See: https://tiktokenizer.vercel.app/?model=o200k_base
 TRUE_TOKEN_ID = 4710
 FALSE_TOKEN_ID = 8168
@@ -46,7 +46,7 @@ async def rerank_results(
     tasks = []
     for result in results:
         task = openai_client.chat.completions.create(
-            model="gpt-5-nano",  # Fast and cheap
+            model="gpt-4.1-nano",  # Supports logprobs
             messages=[
                 {
                     "role": "system",

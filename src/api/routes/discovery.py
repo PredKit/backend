@@ -60,12 +60,10 @@ async def root():
             },
         },
         "usage_for_llms": (
-            "Use POST /v0/search with JSON body containing 'query' (string), optional "
-            "'limit' (integer, max 100), and optional 'search_type' ('bm25' for "
-            "syntactic (keyword), 'semantic' for semantic (meaning), or 'hybrid' for "
-            "both - returns 2x limit for re-ranking, defaults to 'bm25'). Returns "
-            "ranked results with platform, platform_id, search_text, relevance rank, "
-            "and source (hybrid only)."
+            "POST /v0/search with 'query' (string, required), 'limit' (integer 1-10, "
+            "default 10), 'search_type' (string: 'syntactic', 'semantic', or 'hybrid' "
+            "default). Returns re-ranked results with platform, platform_id, "
+            "search_text, and confidence score (0.0-1.0)."
         ),
     }
 
@@ -96,17 +94,14 @@ async def llms_txt():
 
 The primary endpoint is `POST /v0/search` which accepts:
 - `query` (string, required): Natural language search query
-  (e.g., "Trump election 2024")
-- `limit` (integer, optional): Max results to return (default: 10, max: 100)
-- `search_type` (string, optional): Search algorithm - "bm25" (keyword),
-  "semantic" (meaning), or "hybrid" (both, returns 2x limit)
+- `limit` (integer, optional): Max results (1-10, default: 10)
+- `search_type` (string, optional): "syntactic", "semantic", or "hybrid" (default)
 
-Returns ranked results with:
-- `platform`: Source platform (polymarket, kalshi)
-- `platform_id`: Unique event ID on that platform
-- `search_text`: Searchable description of the event
-- `rank`: Relevance score (BM25 rank or cosine distance)
-- `source`: Result source - "bm25" or "semantic" (hybrid only)
+Returns re-ranked results with:
+- `platform`: polymarket or kalshi
+- `platform_id`: Unique event ID
+- `search_text`: Event description
+- `rank`: Confidence score (0.0-1.0, higher = more relevant)
 
 ## API Documentation
 
@@ -227,11 +222,10 @@ Polymarket and Kalshi.
 POST /v0/search
 - Parameters:
   - query (string, required): Natural language search query
-  - limit (integer, optional): Max results (default: 10, max: 100)
-  - search_type (string, optional): "bm25" (keyword), "semantic" (meaning),
-    or "hybrid" (both, returns 2x limit)
-- Returns: Ranked search results with platform, platform_id, search_text,
-  rank score, and source (hybrid only)
+  - limit (integer, optional): Max results (1-10, default: 10)
+  - search_type (string, optional): "syntactic", "semantic", or "hybrid" (default)
+- Returns: re-ranked results with platform, platform_id, search_text,
+  and confidence score (0.0-1.0)
 
 ## Documentation
 
@@ -259,15 +253,14 @@ Content-Type: application/json
 Response:
 {
   "query": "Trump election 2024",
-  "total": 10,
-  "search_type": "bm25",
+  "total": 5,
+  "search_type": "hybrid",
   "results": [
     {
       "platform": "polymarket",
       "platform_id": "abc123",
       "search_text": "Will Trump win the 2024 election?",
-      "rank": 8.5,
-      "source": null
+      "rank": 0.95
     }
   ]
 }
