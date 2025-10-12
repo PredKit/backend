@@ -5,18 +5,39 @@ FastAPI application for PredKit search API
 from contextlib import asynccontextmanager
 
 import structlog
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+from alembic import command
 
 from .routes import discovery, health, search
 
 logger = structlog.get_logger()
 
 
+def run_migrations() -> None:
+    """Run database migrations using Alembic"""
+    logger.info("Running database migrations...")
+    alembic_cfg = Config("alembic.ini")
+    # Don't set URL here - let alembic/env.py handle it to avoid ConfigParser issues
+    alembic_cfg.attributes["configure_logger"] = False  # Use our logger
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Database migrations completed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
     """Lifespan context manager for startup/shutdown events"""
     logger.info("Starting PredKit API")
+
+    # Run migrations on startup
+    try:
+        run_migrations()
+    except Exception as e:
+        logger.error("Failed to run migrations", error=str(e), exc_info=True)
+        raise
+
     yield
     logger.info("Shutting down PredKit API")
 

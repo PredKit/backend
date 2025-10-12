@@ -18,7 +18,7 @@ class Event(Base, TimestampMixin):
     An event represents a real-world occurrence (e.g., election, sports game)
     with multiple markets (betting options). Events are the primary search entity.
 
-    Optimized for full-text search using ParadeDB's BM25 indexing.
+    Optimized for both syntactic and semantic search.
     """
 
     __tablename__ = "event"

@@ -9,6 +9,9 @@ import sys
 from pathlib import Path
 
 import structlog
+from alembic.config import Config
+
+from alembic import command
 
 # Add src to path (go up two levels from src/indexers/run.py to get to backend/)
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -19,9 +22,26 @@ from shared.entities import Platform
 logger = structlog.get_logger()
 
 
+def run_migrations() -> None:
+    """Run database migrations using Alembic"""
+    logger.info("Running database migrations...")
+    alembic_cfg = Config("alembic.ini")
+    # Don't set URL here - let alembic/env.py handle it to avoid ConfigParser issues
+    alembic_cfg.attributes["configure_logger"] = False  # Use our logger
+    command.upgrade(alembic_cfg, "head")
+    logger.info("Database migrations completed")
+
+
 async def main():
     """Run indexer for all platforms (production mode)"""
     logger.info("Starting production indexer")
+
+    # Run migrations before indexing
+    try:
+        run_migrations()
+    except Exception as e:
+        logger.error("Failed to run migrations", error=str(e), exc_info=True)
+        sys.exit(1)
 
     try:
         # Index all platforms, all pages

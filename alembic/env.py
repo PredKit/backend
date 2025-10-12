@@ -17,12 +17,18 @@ from shared.models import Base  # This imports all models via __init__.py
 # access to the values within the .ini file in use.
 config = context.config
 
-# Override sqlalchemy.url from environment
-config.set_main_option("sqlalchemy.url", settings.sync_database_url)
+# Get database URL - use from config if already set (by our code), otherwise from settings
+# This avoids ConfigParser interpolation issues with special characters in passwords
+db_url = config.get_main_option("sqlalchemy.url")
+if not db_url or db_url == "postgresql://user:pass@localhost/dbname":
+    # Not set or is the placeholder, use settings
+    db_url = settings.sync_database_url
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
+if config.config_file_name is not None and config.attributes.get(
+    "configure_logger", True
+):
     fileConfig(config.config_file_name)
 
 # add your model's MetaData object here
@@ -42,9 +48,8 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
     context.configure(
-        url=url,
+        url=db_url,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -63,8 +68,8 @@ def run_migrations_online() -> None:
     """
     from sqlalchemy import create_engine
 
-    # Use settings from shared config instead of alembic.ini
-    connectable = create_engine(settings.sync_database_url, poolclass=pool.NullPool)
+    # Use database URL (from config or settings)
+    connectable = create_engine(db_url, poolclass=pool.NullPool)
 
     with connectable.connect() as connection:
         context.configure(connection=connection, target_metadata=target_metadata)

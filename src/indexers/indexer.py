@@ -97,7 +97,7 @@ class EventIndexer:
                 page_num += 1
 
                 async with AsyncSessionLocal() as session:
-                    page_stats = await self._upsert_events(session, events_page)
+                    page_stats = await self._insert_new_events(session, events_page)
                     await session.commit()
 
                 total_inserted += page_stats.inserted
@@ -134,56 +134,47 @@ class EventIndexer:
             inserted=total_inserted, updated=total_updated, errors=total_errors
         )
 
-    async def _upsert_events(
+    async def _insert_new_events(
         self, session: AsyncSession, events: list[EventEntity]
     ) -> IndexStats:
-        """Upsert events using batch queries"""
+        """Insert only new events (skip existing ones to avoid re-embedding)"""
         if not events:
             return IndexStats(inserted=0, updated=0, errors=0)
 
         from sqlalchemy import tuple_
 
+        # Fetch only the keys of existing events (not full objects)
         event_keys = [(e.platform.value, e.platform_id) for e in events]
 
         chunk_size = 1000
-        existing_events: list[EventModel] = []
+        existing_keys: set[tuple[str, str]] = set()
 
         for i in range(0, len(event_keys), chunk_size):
             chunk = event_keys[i : i + chunk_size]
-            stmt = select(EventModel).where(
+            stmt = select(EventModel.platform, EventModel.platform_id).where(
                 tuple_(EventModel.platform, EventModel.platform_id).in_(chunk)
             )
             result = await session.execute(stmt)
-            existing_events.extend(result.scalars().all())
+            existing_keys.update(tuple(row) for row in result.all())
 
-        existing_lookup = {(e.platform, e.platform_id): e for e in existing_events}
-
-        to_insert: list[EventModel] = []
-        to_update: list[EventModel] = []
-
-        for event_entity in events:
-            key = (event_entity.platform.value, event_entity.platform_id)
-            existing = existing_lookup.get(key)
-
-            if existing:
-                existing.search_text = event_entity.search_text
-                existing.raw_data = event_entity.raw_data
-                to_update.append(existing)
-            else:
-                new_event = EventModel(
-                    platform=event_entity.platform.value,
-                    platform_id=event_entity.platform_id,
-                    search_text=event_entity.search_text,
-                    raw_data=event_entity.raw_data,
-                )
-                to_insert.append(new_event)
+        # Only insert events that don't exist yet
+        to_insert = [
+            EventModel(
+                platform=e.platform.value,
+                platform_id=e.platform_id,
+                search_text=e.search_text,
+                raw_data=e.raw_data,
+            )
+            for e in events
+            if (e.platform.value, e.platform_id) not in existing_keys
+        ]
 
         if to_insert:
             session.add_all(to_insert)
 
         return IndexStats(
             inserted=len(to_insert),
-            updated=len(to_update),
+            updated=0,  # Never update
             errors=0,
         )
 

@@ -29,8 +29,13 @@ async def root():
         "name": "PredKit API",
         "version": "0.1.0",
         "status": "beta",
-        "description": "Search prediction markets across platforms (Polymarket, Kalshi)",
-        "purpose": "Provides programmatic access to search prediction market events using natural language queries with BM25 full-text search",
+        "description": (
+            "Search prediction markets across platforms (Polymarket, Kalshi)"
+        ),
+        "purpose": (
+            "Provides programmatic access to search prediction market events "
+            "using natural language queries with syntactic and semantic search"
+        ),
         "documentation": {
             "interactive": "https://api.predkit.com/docs",
             "alternative": "https://api.predkit.com/redoc",
@@ -50,10 +55,18 @@ async def root():
                 "example": {
                     "query": "Trump election",
                     "limit": 10,
+                    "search_type": "hybrid",
                 },
             },
         },
-        "usage_for_llms": "Use POST /v0/search with JSON body containing 'query' (string) and optional 'limit' (integer, max 100) to search prediction markets. Returns ranked results with platform, platform_id, search_text, and relevance rank.",
+        "usage_for_llms": (
+            "Use POST /v0/search with JSON body containing 'query' (string), optional "
+            "'limit' (integer, max 100), and optional 'search_type' ('bm25' for "
+            "syntactic (keyword), 'semantic' for semantic (meaning), or 'hybrid' for "
+            "both - returns 2x limit for re-ranking, defaults to 'bm25'). Returns "
+            "ranked results with platform, platform_id, search_text, relevance rank, "
+            "and source (hybrid only)."
+        ),
     }
 
 
@@ -66,7 +79,9 @@ async def llms_txt():
     """
     content = """# PredKit API
 
-> A REST API for searching prediction markets across multiple platforms (Polymarket, Kalshi) using natural language queries with BM25 full-text search ranking.
+> A REST API for searching prediction markets across multiple platforms
+> (Polymarket, Kalshi) using natural language queries with syntactic and
+> semantic search.
 
 ## Key Information
 
@@ -80,14 +95,18 @@ async def llms_txt():
 ## How to Use
 
 The primary endpoint is `POST /v0/search` which accepts:
-- `query` (string, required): Natural language search query (e.g., "Trump election 2024")
+- `query` (string, required): Natural language search query
+  (e.g., "Trump election 2024")
 - `limit` (integer, optional): Max results to return (default: 10, max: 100)
+- `search_type` (string, optional): Search algorithm - "bm25" (keyword),
+  "semantic" (meaning), or "hybrid" (both, returns 2x limit)
 
 Returns ranked results with:
 - `platform`: Source platform (polymarket, kalshi)
 - `platform_id`: Unique event ID on that platform
 - `search_text`: Searchable description of the event
-- `rank`: BM25 relevance score (higher = more relevant)
+- `rank`: Relevance score (BM25 rank or cosine distance)
+- `source`: Result source - "bm25" or "semantic" (hybrid only)
 
 ## API Documentation
 
@@ -109,12 +128,14 @@ curl -X POST https://api.predkit.com/v0/search \\
 {
   "query": "Trump election 2024",
   "total": 10,
+  "search_type": "bm25",
   "results": [
     {
       "platform": "polymarket",
       "platform_id": "abc123",
       "search_text": "Will Trump win the 2024 election?",
-      "rank": 8.5
+      "rank": 8.5,
+      "source": null
     }
   ]
 }
@@ -198,15 +219,19 @@ async def ai_txt():
     """
     content = """# PredKit API - AI Discovery
 
-This API provides search capabilities for prediction markets across Polymarket and Kalshi.
+This API provides search capabilities for prediction markets across
+Polymarket and Kalshi.
 
 ## Primary Endpoint
 
 POST /v0/search
-- Parameters: 
+- Parameters:
   - query (string, required): Natural language search query
   - limit (integer, optional): Max results (default: 10, max: 100)
-- Returns: Ranked search results with platform, platform_id, search_text, and BM25 rank score
+  - search_type (string, optional): "bm25" (keyword), "semantic" (meaning),
+    or "hybrid" (both, returns 2x limit)
+- Returns: Ranked search results with platform, platform_id, search_text,
+  rank score, and source (hybrid only)
 
 ## Documentation
 
@@ -235,12 +260,14 @@ Response:
 {
   "query": "Trump election 2024",
   "total": 10,
+  "search_type": "bm25",
   "results": [
     {
       "platform": "polymarket",
       "platform_id": "abc123",
       "search_text": "Will Trump win the 2024 election?",
-      "rank": 8.5
+      "rank": 8.5,
+      "source": null
     }
   ]
 }

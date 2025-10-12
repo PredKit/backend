@@ -151,6 +151,57 @@
       register: compose_up_result
       changed_when: "'Pulled' in compose_up_result.stderr or 'Started' in compose_up_result.stderr or 'Recreated' in compose_up_result.stderr"
 
+    - name: Wait for database to be ready
+      shell: |
+        docker compose -f {{ compose_dir }}/compose.yml exec -T postgres pg_isready -U {{ postgres_user }}
+      register: pg_ready
+      retries: 30
+      delay: 2
+      until: pg_ready.rc == 0
+
+    - name: Install required PostgreSQL extensions
+      shell: |
+        docker compose -f {{ compose_dir }}/compose.yml exec -T postgres psql -U {{ postgres_user }} -d {{ postgres_db }} << 'EOF'
+        -- Enable required extensions for PredKit
+        
+        -- Create pg_search extension (ParadeDB - for BM25)
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_search') THEN
+                CREATE EXTENSION IF NOT EXISTS pg_search;
+                RAISE NOTICE 'pg_search extension created';
+            ELSE
+                RAISE WARNING 'pg_search extension not available';
+            END IF;
+        END $$;
+        
+        -- Create ai extension (pgai, will CASCADE install vector)
+        DO $$
+        BEGIN
+            IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'ai') THEN
+                CREATE EXTENSION IF NOT EXISTS ai CASCADE;
+                RAISE NOTICE 'ai extension created';
+            ELSE
+                RAISE WARNING 'ai extension not available';
+            END IF;
+        END $$;
+        
+        -- Verify extensions
+        SELECT extname, extversion FROM pg_extension 
+        WHERE extname IN ('pg_search', 'ai') 
+        ORDER BY extname;
+        EOF
+      register: extensions_result
+      changed_when: "'CREATE EXTENSION' in extensions_result.stdout"
+
+    - name: Install pgai in database (creates ai schema and functions)
+      shell: |
+        docker run --rm --network predkit_predkit-network python:3.12-slim \
+          bash -c "pip install -q pgai && python -c \"import urllib.parse; import pgai; pgai.install('postgresql://{{ postgres_user }}:' + urllib.parse.quote('{{ postgres_password }}') + '@postgres:5432/{{ postgres_db }}')\""
+      register: pgai_install
+      changed_when: "'already installed' not in pgai_install.stdout"
+      failed_when: false
+
     - name: Create systemd service for predkit stack
       template:
         src: predkit-stack.service.j2

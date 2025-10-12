@@ -27,29 +27,39 @@ services:
       retries: 3
       start_period: 60s
 
-  # Optional: pgai vectorizer worker (use --profile vectorizer to enable)
+  # pgai vectorizer worker for semantic search
   vectorizer:
     image: python:3.13-slim
     container_name: pgai-vectorizer
     restart: unless-stopped
     environment:
-      # Connect to postgres via host network (localhost)
-      - DB_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@host.docker.internal:${POSTGRES_PORT}/${POSTGRES_DB}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-    command: >
-      sh -c "
+    command:
+      - sh
+      - -c
+      - |
         pip install --no-cache-dir 'pgai[vectorizer-worker]' &&
-        python -c 'from pgai.vectorizer import Worker; Worker(\"$$DB_URL\").run()'
-      "
+        python -c "
+        import asyncio, os, urllib.parse
+        from pgai.vectorizer import Worker
+        user = os.environ['POSTGRES_USER']
+        password = urllib.parse.quote(os.environ['POSTGRES_PASSWORD'], safe='')
+        host = os.environ['POSTGRES_HOST']
+        port = os.environ['POSTGRES_PORT']
+        db = os.environ['POSTGRES_DB']
+        db_url = f'postgresql://{user}:{password}@{host}:{port}/{db}'
+        asyncio.run(Worker(db_url).run())
+        "
     depends_on:
       postgres:
         condition: service_healthy
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     networks:
       - predkit-network
-    profiles:
-      - vectorizer
 
   # Event indexer job (triggered by systemd timer, not running continuously)
   indexer:
@@ -81,6 +91,7 @@ services:
       - DB_NAME=${POSTGRES_DB}
       - DB_USER=${POSTGRES_USER}
       - DB_PASSWORD=${POSTGRES_PASSWORD}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
     depends_on:
       postgres:
         condition: service_healthy
