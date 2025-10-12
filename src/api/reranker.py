@@ -109,8 +109,8 @@ async def rerank_results(
 
             # Only include results above threshold
             if score >= min_score:
-                # Update the rank to reflect confidence score
-                result.rank = float(score)
+                # Update the confidence to reflect LLM confidence score
+                result.confidence = float(score)
                 scored_results.append(result)
 
         except Exception as e:
@@ -122,7 +122,7 @@ async def rerank_results(
             continue
 
     # Sort by score (descending - higher confidence first)
-    scored_results.sort(key=lambda x: x.rank, reverse=True)
+    scored_results.sort(key=lambda x: x.confidence, reverse=True)
 
     logger.info(
         "Reranking completed",

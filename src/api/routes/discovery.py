@@ -62,8 +62,8 @@ async def root():
         "usage_for_llms": (
             "POST /v0/search with 'query' (string, required), 'limit' (integer 1-10, "
             "default 10), 'search_type' (string: 'syntactic', 'semantic', or 'hybrid' "
-            "default). Returns re-ranked results with platform, platform_id, "
-            "search_text, and confidence score (0.0-1.0)."
+            "default). Returns re-ranked results with platform, platform_id, search_text, "
+            "and 'confidence' (0.0-1.0)."
         ),
     }
 
@@ -101,7 +101,7 @@ Returns re-ranked results with:
 - `platform`: polymarket or kalshi
 - `platform_id`: Unique event ID
 - `search_text`: Event description
-- `rank`: Confidence score (0.0-1.0, higher = more relevant)
+- `confidence`: Relevance score (0.0-1.0, higher = more relevant)
 
 ## API Documentation
 
@@ -123,14 +123,13 @@ curl -X POST https://api.predkit.com/v0/search \\
 {
   "query": "Trump election 2024",
   "total": 10,
-  "search_type": "bm25",
+  "search_type": "hybrid",
   "results": [
     {
       "platform": "polymarket",
       "platform_id": "abc123",
       "search_text": "Will Trump win the 2024 election?",
-      "rank": 8.5,
-      "source": null
+      "confidence": 0.95
     }
   ]
 }
@@ -225,7 +224,7 @@ POST /v0/search
   - limit (integer, optional): Max results (1-10, default: 10)
   - search_type (string, optional): "syntactic", "semantic", or "hybrid" (default)
 - Returns: re-ranked results with platform, platform_id, search_text,
-  and confidence score (0.0-1.0)
+  and 'confidence' (0.0-1.0)
 
 ## Documentation
 
@@ -260,7 +259,7 @@ Response:
       "platform": "polymarket",
       "platform_id": "abc123",
       "search_text": "Will Trump win the 2024 election?",
-      "rank": 0.95
+      "confidence": 0.95
     }
   ]
 }

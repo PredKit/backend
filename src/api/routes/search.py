@@ -48,7 +48,7 @@ async def _search_bm25(query: str, limit: int, db: AsyncSession) -> list[EventRe
             platform=Platform(row.platform),
             platform_id=row.platform_id,
             search_text=row.search_text,
-            rank=float(row.rank),
+            confidence=float(row.rank),
         )
         for row in rows
     ]
@@ -110,7 +110,7 @@ async def _search_semantic(
             platform=Platform(row.platform),
             platform_id=row.platform_id,
             search_text=row.search_text,
-            rank=float(row.rank),
+            confidence=float(row.rank),
         )
         for row in rows
     ]
@@ -162,11 +162,11 @@ async def search_events(
     - **semantic**: AI-powered meaning-based search
     - **hybrid**: Best of both worlds (default, recommended)
 
-    All results are automatically filtered using AI confidence scoring.
+    All results are automatically re-ranked using AI confidence scoring.
     Only high-confidence matches (>= 50%) are returned, so you may receive
     fewer results than requested.
 
-    Returns events ranked by relevance to the query.
+    Returns events ranked by confidence score (0.0-1.0).
     """
     try:
         # Route to appropriate search implementation

@@ -55,11 +55,9 @@ class EventResult(BaseModel):
     platform: Annotated[Platform, Field(description="Platform (kalshi or polymarket)")]
     platform_id: Annotated[str, Field(description="Unique ID on the platform")]
     search_text: Annotated[str, Field(description="Searchable text content")]
-    rank: Annotated[
+    confidence: Annotated[
         float,
-        Field(
-            description="Relevance confidence score (0.0-1.0, higher is more relevant)"
-        ),
+        Field(description="Relevance confidence score (0.0-1.0, higher is better)"),
     ]
 
 

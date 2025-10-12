@@ -49,9 +49,9 @@ app = FastAPI(
     Search prediction markets across multiple platforms using natural language queries.
     
     ## Features
-    - **Full-text search** using BM25 ranking algorithm
+    - **Search** with syntactic, semantic, and hybrid modes
     - **Multi-platform** coverage (Polymarket, Kalshi)
-    - **Fast & simple** REST API
+    - **Confidence scoring** with automatic result filtering
     - **No authentication** required
     
     ## For LLMs
