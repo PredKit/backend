@@ -83,15 +83,20 @@ async def _search_semantic(
     # Format embedding as PostgreSQL vector literal string for asyncpg
     embedding_str = "[" + ",".join(str(x) for x in embedding.tolist()) + "]"
 
-    # Use string formatting for the vector cast since asyncpg doesn't handle ::vector with params
+    # Get best chunk per event, sorted by relevance, limited to requested amount
     query_sql = text(f"""
-        SELECT
-            e.platform,
-            e.platform_id,
-            e.search_text,
-            ee.embedding <=> '{embedding_str}'::vector as rank
-        FROM event_embedding ee
-        JOIN event e ON e.id = ee.id
+        WITH ranked_chunks AS (
+            SELECT DISTINCT ON (e.id)
+                e.platform,
+                e.platform_id,
+                e.search_text,
+                ee.embedding <=> '{embedding_str}'::vector as rank
+            FROM event_embedding ee
+            JOIN event e ON e.id = ee.id
+            ORDER BY e.id, ee.embedding <=> '{embedding_str}'::vector ASC
+        )
+        SELECT platform, platform_id, search_text, rank
+        FROM ranked_chunks
         ORDER BY rank ASC
         LIMIT :limit
     """)
